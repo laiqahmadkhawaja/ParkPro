@@ -23,10 +23,12 @@ jobs:
           distribution: 'temurin'
           java-version: '17'
 
-      - name: Set up Gradle 8.2.2
-        uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: '8.2.2'
+      - name: Install Gradle 8.2.2
+        run: |
+          wget -q https://services.gradle.org/distributions/gradle-8.2.2-bin.zip
+          sudo unzip -q gradle-8.2.2-bin.zip -d /opt
+          sudo ln -s /opt/gradle-8.2.2/bin/gradle /usr/local/bin/gradle
+          gradle -v
 
       - name: Build Android Release APK
         working-directory: ./android
