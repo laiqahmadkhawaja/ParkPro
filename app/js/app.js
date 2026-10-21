@@ -1,6 +1,6 @@
 /**
  * ParkPro Core Application Controller
- * Handles UI interactions, offline state, and entry/exit workflows.
+ * Handles UI interactions, offline state, rates engine, and entry/exit workflows.
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -32,17 +32,20 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('offline', updateNetworkStatus);
   updateNetworkStatus();
 
-  // 3. Initialize Local Database and Authentication
+  // 3. Initialize Local Database, Auth, and Settings
   try {
     await window.db.init();
     await window.auth.init();
+    if (window.parkproSettings) {
+      await window.parkproSettings.init();
+    }
     await loadVehicleTypes();
     await refreshDashboard();
   } catch (err) {
-    console.error('[App] Database/Auth initialization failed:', err);
+    console.error('[App] Database/Auth/Settings initialization failed:', err);
   }
 
-  // 4. Modal, Lock & Action Event Listeners
+  // 4. Modal, Settings, Lock & Action Event Listeners
   setupEventListeners();
 });
 
@@ -76,11 +79,14 @@ async function loadVehicleTypes() {
 
 async function refreshDashboard() {
   const kpis = await window.db.getTodayKPIs();
+  const settingsList = await window.db.getAll('settings');
+  const currencySetting = settingsList.find(s => s.key === 'currency');
+  const currency = currencySetting?.value || 'PKR';
   
   document.getElementById('kpiActiveParked').textContent = kpis.activeCount;
   document.getElementById('kpiTodayEntries').textContent = kpis.entriesToday;
   document.getElementById('kpiTodayExits').textContent = kpis.exitsToday;
-  document.getElementById('kpiTodayRevenue').textContent = `${kpis.revenueToday} PKR`;
+  document.getElementById('kpiTodayRevenue').textContent = `${kpis.revenueToday} ${currency}`;
   
   document.getElementById('occupancyText').textContent = `${kpis.activeCount} / ${kpis.totalCapacity} Slots (${kpis.occupancyPercent}%)`;
   document.getElementById('occupancyBar').style.width = `${kpis.occupancyPercent}%`;
@@ -118,11 +124,67 @@ async function refreshDashboard() {
   }).join('');
 }
 
+// Global Tab & Setting Handlers
+window.switchSettingsTab = function(tabName) {
+  ['Profile', 'Rates', 'Receipt'].forEach(t => {
+    const btn = document.getElementById(`tabBtn${t}`);
+    const content = document.getElementById(`tabContent${t}`);
+    if (btn) btn.classList.remove('active');
+    if (content) content.style.display = 'none';
+  });
+
+  const capitalized = tabName.charAt(0).toUpperCase() + tabName.slice(1);
+  const activeBtn = document.getElementById(`tabBtn${capitalized}`);
+  const activeContent = document.getElementById(`tabContent${capitalized}`);
+  if (activeBtn) activeBtn.classList.add('active');
+  if (activeContent) activeContent.style.display = 'block';
+
+  if (tabName === 'receipt' && window.parkproSettings) {
+    window.parkproSettings.renderReceiptPreview();
+  }
+};
+
+window.toggleReceiptWidth = function(width) {
+  if (window.parkproSettings) {
+    window.parkproSettings.receiptWidth = width;
+    window.parkproSettings.renderReceiptPreview();
+  }
+};
+
 function setupEventListeners() {
   // Lock Button
   const btnLock = document.getElementById('btnLockApp');
   if (btnLock) {
     btnLock.onclick = () => window.auth.lock();
+  }
+
+  // Settings Modal Controls
+  const settingsModal = document.getElementById('settingsModal');
+  const btnNavSettings = document.getElementById('btnNavSettings');
+  const btnCloseSettings = document.getElementById('btnCloseSettings');
+
+  if (btnNavSettings && settingsModal) {
+    btnNavSettings.onclick = async () => {
+      if (window.parkproSettings) {
+        await window.parkproSettings.loadSettings();
+        await window.parkproSettings.renderRatesTable();
+        window.parkproSettings.renderReceiptPreview();
+      }
+      switchSettingsTab('profile');
+      settingsModal.classList.add('active');
+    };
+  }
+
+  if (btnCloseSettings && settingsModal) {
+    btnCloseSettings.onclick = () => settingsModal.classList.remove('active');
+  }
+
+  const settingsForm = document.getElementById('settingsForm');
+  if (settingsForm) {
+    settingsForm.onsubmit = async (e) => {
+      e.preventDefault();
+      await window.parkproSettings.saveSettings();
+    };
   }
 
   // First-Run Setup Wizard Form Submission
@@ -247,7 +309,7 @@ function setupEventListeners() {
     alert(`Vehicle Entry Logged!\nPlate: ${plateNumber}\nTicket: ${ticketNo}\nRate: ${selectedVehicleType.base_rate} PKR`);
   };
 
-  // Exit Search and Calculation
+  // Exit Search and Dynamic Fee Calculation Engine
   document.getElementById('btnSearchExit').onclick = async () => {
     const query = document.getElementById('exitTicketInput').value.trim().toUpperCase();
     if (!query) return;
@@ -261,18 +323,24 @@ function setupEventListeners() {
       return;
     }
 
-    const typeObj = vehicleTypesList.find(v => v.id === session.vehicle_type_id) || { name: 'Vehicle', base_rate: 50, hourly_rate: 30 };
-    
+    const typeObj = vehicleTypesList.find(v => v.id === session.vehicle_type_id) || {
+      name: 'Vehicle',
+      base_rate: 60,
+      hourly_rate: 50,
+      grace_period_mins: 10,
+      daily_max: 300,
+      night_rate: 0
+    };
+
     const entryDate = new Date(session.entry_time);
     const exitDate = new Date();
-    const durationMins = Math.max(1, Math.round((exitDate - entryDate) / 60000));
-    const durationHours = Math.ceil(durationMins / 60);
 
-    // Calculate fee (Base rate + extra hours)
-    let calculatedFee = typeObj.base_rate;
-    if (durationHours > 1) {
-      calculatedFee += (durationHours - 1) * typeObj.hourly_rate;
-    }
+    // Use Advanced Fee Engine
+    const feeResult = window.feeEngine.calculateFee(entryDate, exitDate, typeObj);
+
+    const settingsList = await window.db.getAll('settings');
+    const currencySetting = settingsList.find(s => s.key === 'currency');
+    const currency = currencySetting?.value || 'PKR';
 
     document.getElementById('exitDetailsBox').style.display = 'block';
     document.getElementById('exitDetailsBox').innerHTML = `
@@ -291,12 +359,15 @@ function setupEventListeners() {
         </div>
         <div style="display:flex;justify-content:space-between;">
           <span style="color:var(--text-muted);">Duration:</span>
-          <span>${durationMins} mins (${durationHours} hr)</span>
+          <span>${feeResult.durationMins} mins (${feeResult.durationHours} hr)</span>
         </div>
+        ${feeResult.isGracePeriod ? '<div style="color:var(--accent-warning);font-size:12px;font-weight:700;">★ Within Grace Period (Free Exit)</div>' : ''}
+        ${feeResult.daysCount > 0 ? `<div style="font-size:12px;color:var(--text-muted);">${feeResult.daysCount} Full Day(s) capped: ${feeResult.dailyAmount} ${currency}</div>` : ''}
+        ${feeResult.nightSurcharge > 0 ? `<div style="font-size:12px;color:var(--text-muted);">Night Tariff Applied: +${feeResult.nightSurcharge} ${currency}</div>` : ''}
         <hr style="border:none;border-top:1px solid var(--border-color);margin:4px 0;">
         <div style="display:flex;justify-content:space-between;align-items:center;">
           <span style="font-size:16px;font-weight:700;">Total Fee:</span>
-          <span style="font-size:22px;font-weight:800;color:var(--accent-success);">${calculatedFee} PKR</span>
+          <span style="font-size:22px;font-weight:800;color:var(--accent-success);">${feeResult.totalFee} ${currency}</span>
         </div>
       </div>
     `;
@@ -307,7 +378,7 @@ function setupEventListeners() {
       const operatorId = window.auth.currentUser ? window.auth.currentUser.id : 'usr_admin';
       session.exit_time = exitDate.toISOString();
       session.operator_exit_id = operatorId;
-      session.total_amount = calculatedFee;
+      session.total_amount = feeResult.totalFee;
       session.status = 'completed';
       session.sync_status = 'pending';
       session.updated_at = exitDate.toISOString();
@@ -317,7 +388,7 @@ function setupEventListeners() {
 
       exitModal.classList.remove('active');
       await refreshDashboard();
-      alert(`Payment Settled!\nCollected: ${calculatedFee} PKR\nGate opened.`);
+      alert(`Payment Settled!\nCollected: ${feeResult.totalFee} ${currency}\nGate opened.`);
     };
   };
 }

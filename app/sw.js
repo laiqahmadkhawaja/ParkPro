@@ -1,4 +1,4 @@
-const CACHE_NAME = 'parkpro-v1.0.1';
+const CACHE_NAME = 'parkpro-v1.0.2';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -6,6 +6,8 @@ const STATIC_ASSETS = [
   './css/app.css',
   './js/db.js',
   './js/auth.js',
+  './js/fee-engine.js',
+  './js/settings.js',
   './js/app.js'
 ];
 
