@@ -40,6 +40,12 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.parkproSettings) {
       await window.parkproSettings.init();
     }
+    if (window.parkproReports) {
+      await window.parkproReports.init();
+    }
+    if (window.parkproSync) {
+      window.parkproSync.init();
+    }
     await loadVehicleTypes();
     await refreshDashboard();
   } catch (err) {
@@ -57,27 +63,55 @@ let activeCategoryFilter = 'all';
 let currentExitSession = null;
 let currentExitFeeResult = null;
 
-// View Navigation Switcher (Dashboard vs Vehicles Registry)
+// View Navigation Switcher (Dashboard vs Vehicles Registry vs Reports)
 window.switchMainView = function(viewName) {
   const dashboardView = document.getElementById('viewDashboard');
   const vehiclesView = document.getElementById('viewVehicles');
+  const reportsView = document.getElementById('viewReports');
   const btnNavDashboard = document.getElementById('btnNavDashboard');
   const btnNavVehicles = document.getElementById('btnNavVehicles');
+  const btnNavReports = document.getElementById('btnNavReports');
+
+  dashboardView.style.display = 'none';
+  vehiclesView.style.display = 'none';
+  if (reportsView) reportsView.style.display = 'none';
+
+  btnNavDashboard?.classList.remove('active');
+  btnNavVehicles?.classList.remove('active');
+  btnNavReports?.classList.remove('active');
 
   if (viewName === 'dashboard') {
     dashboardView.style.display = 'flex';
-    vehiclesView.style.display = 'none';
     btnNavDashboard?.classList.add('active');
-    btnNavVehicles?.classList.remove('active');
     refreshDashboard();
   } else if (viewName === 'vehicles') {
-    dashboardView.style.display = 'none';
     vehiclesView.style.display = 'flex';
-    btnNavDashboard?.classList.remove('active');
     btnNavVehicles?.classList.add('active');
     renderCategoryFilters();
     renderFullVehiclesRegistry();
+  } else if (viewName === 'reports') {
+    if (reportsView) {
+      reportsView.style.display = 'flex';
+      btnNavReports?.classList.add('active');
+      if (window.parkproReports) {
+        window.parkproReports.init();
+      }
+    }
   }
+};
+
+window.setReportRange = function(range) {
+  if (!window.parkproReports) return;
+  window.parkproReports.selectedRange = range;
+  ['Today', 'Yesterday', 'Week', 'All'].forEach(r => {
+    const btn = document.getElementById(`rangeBtn${r}`);
+    if (btn) btn.classList.remove('active');
+  });
+  const capitalized = range.charAt(0).toUpperCase() + range.slice(1);
+  const activeBtn = document.getElementById(`rangeBtn${capitalized}`);
+  if (activeBtn) activeBtn.classList.add('active');
+
+  window.parkproReports.renderReports();
 };
 
 async function loadVehicleTypes() {
