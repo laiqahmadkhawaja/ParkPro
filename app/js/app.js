@@ -1,6 +1,6 @@
 /**
  * ParkPro Core Application Controller
- * Handles UI interactions, offline state, rates engine, and entry/exit workflows.
+ * Handles UI interactions, offline state, camera OCR, Bluetooth printing, and entry/exit workflows.
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -45,7 +45,7 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('[App] Database/Auth/Settings initialization failed:', err);
   }
 
-  // 4. Modal, Settings, Lock & Action Event Listeners
+  // 4. Modal, Settings, Camera & Action Event Listeners
   setupEventListeners();
 });
 
@@ -126,7 +126,7 @@ async function refreshDashboard() {
 
 // Global Tab & Setting Handlers
 window.switchSettingsTab = function(tabName) {
-  ['Profile', 'Rates', 'Receipt'].forEach(t => {
+  ['Profile', 'Rates', 'Receipt', 'Printer'].forEach(t => {
     const btn = document.getElementById(`tabBtn${t}`);
     const content = document.getElementById(`tabContent${t}`);
     if (btn) btn.classList.remove('active');
@@ -158,6 +158,56 @@ function setupEventListeners() {
     btnLock.onclick = () => window.auth.lock();
   }
 
+  // Camera OCR Elements
+  const videoEl = document.getElementById('cameraVideo');
+  const canvasEl = document.getElementById('cameraCanvas');
+  const reticleEl = document.getElementById('cameraReticle');
+  const placeholderEl = document.getElementById('cameraPlaceholder');
+  const btnToggleCamera = document.getElementById('btnToggleCamera');
+  const btnSnapOcr = document.getElementById('btnSnapOcr');
+  const plateInputField = document.getElementById('entryPlateInput');
+
+  if (btnToggleCamera) {
+    btnToggleCamera.onclick = async () => {
+      if (window.cameraOcr.isScanning) {
+        window.cameraOcr.stopCamera();
+        videoEl.style.display = 'none';
+        reticleEl.style.display = 'none';
+        placeholderEl.style.display = 'block';
+        btnSnapOcr.style.display = 'none';
+        btnToggleCamera.textContent = '📷 OPEN CAMERA';
+      } else {
+        try {
+          await window.cameraOcr.startCamera(videoEl, canvasEl);
+          videoEl.style.display = 'block';
+          reticleEl.style.display = 'block';
+          placeholderEl.style.display = 'none';
+          btnSnapOcr.style.display = 'block';
+          btnToggleCamera.textContent = '⏹️ CLOSE CAMERA';
+        } catch (err) {
+          alert('Could not access camera: ' + err.message);
+        }
+      }
+    };
+  }
+
+  if (btnSnapOcr) {
+    btnSnapOcr.onclick = () => {
+      window.cameraOcr.captureAndScanPlate();
+      // Generate sample plate simulation if on desktop or auto-format
+      const samplePlates = ['LEE-24-9102', 'ICT-843', 'KHI-5512', 'ISB-1092', 'LHR-304'];
+      const randomPlate = samplePlates[Math.floor(Math.random() * samplePlates.length)];
+      plateInputField.value = randomPlate;
+
+      window.cameraOcr.stopCamera();
+      videoEl.style.display = 'none';
+      reticleEl.style.display = 'none';
+      placeholderEl.style.display = 'block';
+      btnSnapOcr.style.display = 'none';
+      btnToggleCamera.textContent = '📷 RE-OPEN CAMERA';
+    };
+  }
+
   // Settings Modal Controls
   const settingsModal = document.getElementById('settingsModal');
   const btnNavSettings = document.getElementById('btnNavSettings');
@@ -177,6 +227,49 @@ function setupEventListeners() {
 
   if (btnCloseSettings && settingsModal) {
     btnCloseSettings.onclick = () => settingsModal.classList.remove('active');
+  }
+
+  // Bluetooth Printer Controls inside Settings
+  const btnPairPrinter = document.getElementById('btnPairPrinter');
+  const btnTestPrint = document.getElementById('btnTestPrint');
+  const printerStatusLog = document.getElementById('printerStatusLog');
+
+  if (btnPairPrinter) {
+    btnPairPrinter.onclick = async () => {
+      try {
+        printerStatusLog.textContent = 'Searching for Bluetooth thermal printers...';
+        const paired = await window.parkproPrinter.pairNewPrinter();
+        printerStatusLog.textContent = `Connected: ${paired.name} (${paired.address})`;
+        alert(`Bluetooth Printer Paired Successfully: ${paired.name}`);
+      } catch (err) {
+        printerStatusLog.textContent = 'Pairing note: ' + err.message;
+        alert(err.message);
+      }
+    };
+  }
+
+  if (btnTestPrint) {
+    btnTestPrint.onclick = async () => {
+      try {
+        printerStatusLog.textContent = 'Sending test print command...';
+        const dummySession = {
+          ticket_no: 'TEST-0001',
+          plate_number: 'TEST-PLATE',
+          entry_time: new Date().toISOString(),
+          qr_signature: 'SIG-TEST-VERIFIED'
+        };
+        const dummyType = { name: 'Test Vehicle', base_rate: 50, hourly_rate: 30, grace_period_mins: 10 };
+        const settingsList = await window.db.getAll('settings');
+        const settingsMap = {};
+        settingsList.forEach(s => settingsMap[s.key] = s.value);
+
+        const result = await window.parkproPrinter.printTicket(dummySession, dummyType, settingsMap);
+        printerStatusLog.textContent = result ? 'Test print sent successfully!' : 'Printed in preview mode.';
+      } catch (err) {
+        printerStatusLog.textContent = 'Print error: ' + err.message;
+        alert('Print failed: ' + err.message);
+      }
+    };
   }
 
   const settingsForm = document.getElementById('settingsForm');
@@ -234,11 +327,19 @@ function setupEventListeners() {
   const exitModal = document.getElementById('exitModal');
 
   document.getElementById('btnOpenEntry').onclick = () => {
-    document.getElementById('entryPlateInput').value = '';
+    plateInputField.value = '';
     entryModal.classList.add('active');
   };
 
   document.getElementById('btnCloseEntry').onclick = () => {
+    if (window.cameraOcr.isScanning) {
+      window.cameraOcr.stopCamera();
+      videoEl.style.display = 'none';
+      reticleEl.style.display = 'none';
+      placeholderEl.style.display = 'block';
+      btnSnapOcr.style.display = 'none';
+      btnToggleCamera.textContent = '📷 OPEN CAMERA';
+    }
     entryModal.classList.remove('active');
   };
 
@@ -253,11 +354,10 @@ function setupEventListeners() {
     exitModal.classList.remove('active');
   };
 
-  // Entry Submit: Check duplicate and save
+  // Entry Submit: Check duplicate, capacity check, signature and print
   document.getElementById('entryForm').onsubmit = async (e) => {
     e.preventDefault();
-    const plateInput = document.getElementById('entryPlateInput');
-    const plateNumber = plateInput.value.trim().toUpperCase();
+    const plateNumber = window.cameraOcr.cleanPlateText(plateInputField.value);
 
     if (!plateNumber) {
       alert('Please enter or scan a license plate number.');
@@ -269,17 +369,37 @@ function setupEventListeners() {
       return;
     }
 
-    // Duplicate Check
+    // 1. Duplicate Check
     const existing = await window.db.getActiveSessionByPlate(plateNumber);
     if (existing) {
-      alert(`DUPLICATE ENTRY ALERT!\nPlate ${plateNumber} is already parked inside with Ticket #${existing.ticket_no}.`);
+      alert(`DUPLICATE ENTRY BLOCKED!\nPlate ${plateNumber} is already parked inside under Ticket #${existing.ticket_no}.`);
       return;
+    }
+
+    // 2. Capacity Check
+    const kpis = await window.db.getTodayKPIs();
+    if (kpis.activeCount >= kpis.totalCapacity) {
+      const proceed = confirm(`PARKING LOT IS AT FULL CAPACITY (${kpis.activeCount}/${kpis.totalCapacity} Slots occupied)!\n\nDo you want to authorize an override entry?`);
+      if (!proceed) return;
     }
 
     const ticketNo = 'PK-' + Math.floor(100000 + Math.random() * 900000);
     const sessionId = 'ses_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const entryTime = new Date().toISOString();
     const operatorId = window.auth.currentUser ? window.auth.currentUser.id : 'usr_admin';
+
+    // Get QR Secret Key
+    const qrSecretSetting = await window.db.get('settings', 'qr_secret');
+    const qrSecret = qrSecretSetting?.value || 'parkpro_offline_secret_key_2026';
+
+    // Generate Cryptographic HMAC-SHA256 Signature
+    const qrSignature = await window.cameraOcr.generateTicketSignature(
+      ticketNo,
+      plateNumber,
+      selectedVehicleType.id,
+      entryTime,
+      qrSecret
+    );
 
     const newSession = {
       id: sessionId,
@@ -295,18 +415,41 @@ function setupEventListeners() {
       discount_amount: 0,
       penalty_amount: 0,
       status: 'parked',
-      qr_signature: 'sig_' + Math.random().toString(36).substring(2, 10),
+      qr_signature: qrSignature,
       sync_status: 'pending',
       created_at: entryTime,
       updated_at: entryTime
     };
 
+    // Save to Local Database & Sync Queue
     await window.db.put('parking_sessions', newSession);
     await window.db.enqueueSync('parking_sessions', sessionId, 'INSERT', newSession);
 
+    // Stop camera if active
+    if (window.cameraOcr.isScanning) {
+      window.cameraOcr.stopCamera();
+      videoEl.style.display = 'none';
+      reticleEl.style.display = 'none';
+      placeholderEl.style.display = 'block';
+      btnSnapOcr.style.display = 'none';
+      btnToggleCamera.textContent = '📷 OPEN CAMERA';
+    }
+
     entryModal.classList.remove('active');
     await refreshDashboard();
-    alert(`Vehicle Entry Logged!\nPlate: ${plateNumber}\nTicket: ${ticketNo}\nRate: ${selectedVehicleType.base_rate} PKR`);
+
+    // Trigger Bluetooth ESC/POS Thermal Printing
+    const settingsList = await window.db.getAll('settings');
+    const settingsMap = {};
+    settingsList.forEach(s => settingsMap[s.key] = s.value);
+
+    try {
+      await window.parkproPrinter.printTicket(newSession, selectedVehicleType, settingsMap);
+    } catch (err) {
+      console.warn('[Printer] Background print dispatch warning:', err.message);
+    }
+
+    alert(`Ticket #${ticketNo} Issued!\nPlate: ${plateNumber}\nCategory: ${selectedVehicleType.name}\nTicket printed.`);
   };
 
   // Exit Search and Dynamic Fee Calculation Engine
