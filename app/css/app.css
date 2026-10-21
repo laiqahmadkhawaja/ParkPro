@@ -853,3 +853,112 @@ body {
   background: var(--bg-card);
   color: var(--accent-primary);
 }
+
+/* --- Phase 6 & 7: QR Scanner, Advanced Dashboard & Vehicles View Styles --- */
+
+.view-section {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.search-bar-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.search-input {
+  width: 100%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 12px 14px 12px 40px;
+  border-radius: var(--radius-md);
+  font-size: 14px;
+}
+
+.search-input:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
+
+.search-icon {
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 18px;
+  height: 18px;
+  fill: var(--text-muted);
+}
+
+.filter-scroll {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.filter-pill {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: 9999px;
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  cursor: pointer;
+  white-space: nowrap;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.filter-pill.active {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  color: #fff;
+}
+
+.session-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.btn-mini-action {
+  background: var(--bg-card);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 4px 10px;
+  border-radius: var(--radius-sm);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.btn-mini-action.accent {
+  background: rgba(16, 185, 129, 0.2);
+  border-color: rgba(16, 185, 129, 0.5);
+  color: #34d399;
+}
+
+.badge-tampered {
+  background: rgba(239, 68, 68, 0.2);
+  color: #f87171;
+  border: 1px solid #ef4444;
+  padding: 8px 12px;
+  border-radius: var(--radius-md);
+  font-size: 13px;
+  font-weight: 800;
+  text-align: center;
+  margin-bottom: 10px;
+}
+
+.progress-bar.warning {
+  background: linear-gradient(90deg, #f59e0b, #d97706);
+}
+
+.progress-bar.danger {
+  background: linear-gradient(90deg, #ef4444, #b91c1c);
+}

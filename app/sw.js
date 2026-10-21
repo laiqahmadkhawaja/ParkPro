@@ -1,4 +1,4 @@
-const CACHE_NAME = 'parkpro-v1.0.3';
+const CACHE_NAME = 'parkpro-v1.0.4';
 const STATIC_ASSETS = [
   './',
   './index.html',
@@ -10,6 +10,7 @@ const STATIC_ASSETS = [
   './js/settings.js',
   './js/camera-ocr.js',
   './js/printer.js',
+  './js/qr-verifier.js',
   './js/app.js'
 ];
 

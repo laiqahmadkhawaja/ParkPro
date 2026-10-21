@@ -1,6 +1,7 @@
 /**
  * ParkPro Core Application Controller
- * Handles UI interactions, offline state, camera OCR, Bluetooth printing, and entry/exit workflows.
+ * Handles UI interactions, offline state, camera OCR, Bluetooth printing,
+ * QR verification, advanced exit settlement, and real-time operations dashboard.
  */
 
 document.addEventListener('DOMContentLoaded', async () => {
@@ -45,13 +46,39 @@ document.addEventListener('DOMContentLoaded', async () => {
     console.error('[App] Database/Auth/Settings initialization failed:', err);
   }
 
-  // 4. Modal, Settings, Camera & Action Event Listeners
+  // 4. Modal, Settings, Camera, View & Action Event Listeners
   setupEventListeners();
 });
 
 // State
 let selectedVehicleType = null;
 let vehicleTypesList = [];
+let activeCategoryFilter = 'all';
+let currentExitSession = null;
+let currentExitFeeResult = null;
+
+// View Navigation Switcher (Dashboard vs Vehicles Registry)
+window.switchMainView = function(viewName) {
+  const dashboardView = document.getElementById('viewDashboard');
+  const vehiclesView = document.getElementById('viewVehicles');
+  const btnNavDashboard = document.getElementById('btnNavDashboard');
+  const btnNavVehicles = document.getElementById('btnNavVehicles');
+
+  if (viewName === 'dashboard') {
+    dashboardView.style.display = 'flex';
+    vehiclesView.style.display = 'none';
+    btnNavDashboard?.classList.add('active');
+    btnNavVehicles?.classList.remove('active');
+    refreshDashboard();
+  } else if (viewName === 'vehicles') {
+    dashboardView.style.display = 'none';
+    vehiclesView.style.display = 'flex';
+    btnNavDashboard?.classList.remove('active');
+    btnNavVehicles?.classList.add('active');
+    renderCategoryFilters();
+    renderFullVehiclesRegistry();
+  }
+};
 
 async function loadVehicleTypes() {
   vehicleTypesList = await window.db.getAll('vehicle_types');
@@ -88,10 +115,20 @@ async function refreshDashboard() {
   document.getElementById('kpiTodayExits').textContent = kpis.exitsToday;
   document.getElementById('kpiTodayRevenue').textContent = `${kpis.revenueToday} ${currency}`;
   
-  document.getElementById('occupancyText').textContent = `${kpis.activeCount} / ${kpis.totalCapacity} Slots (${kpis.occupancyPercent}%)`;
-  document.getElementById('occupancyBar').style.width = `${kpis.occupancyPercent}%`;
+  const freeSlots = Math.max(0, kpis.totalCapacity - kpis.activeCount);
+  document.getElementById('occupancyText').textContent = `${kpis.activeCount} / ${kpis.totalCapacity} Slots (${kpis.occupancyPercent}%) • ${freeSlots} Free`;
+  
+  // Dynamic Colored Occupancy Bar
+  const occBar = document.getElementById('occupancyBar');
+  occBar.style.width = `${kpis.occupancyPercent}%`;
+  occBar.className = 'progress-bar';
+  if (kpis.occupancyPercent >= 90) {
+    occBar.classList.add('danger');
+  } else if (kpis.occupancyPercent >= 75) {
+    occBar.classList.add('warning');
+  }
 
-  // Load currently parked vehicles
+  // Load recent 5 parked vehicles on Dashboard
   const parkedVehicles = await window.db.getCurrentlyParked();
   const listContainer = document.getElementById('parkedList');
   if (!listContainer) return;
@@ -101,7 +138,10 @@ async function refreshDashboard() {
     return;
   }
 
-  listContainer.innerHTML = parkedVehicles.map(session => {
+  // Show top 5 newest entries
+  const recentFive = [...parkedVehicles].reverse().slice(0, 5);
+
+  listContainer.innerHTML = recentFive.map(session => {
     const typeObj = vehicleTypesList.find(v => v.id === session.vehicle_type_id) || { name: 'Vehicle', icon: '🚗' };
     const entryDate = new Date(session.entry_time);
     const timeFormatted = entryDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -123,6 +163,111 @@ async function refreshDashboard() {
     `;
   }).join('');
 }
+
+// Category Filters for Vehicles View
+function renderCategoryFilters() {
+  const container = document.getElementById('categoryFilterScroll');
+  if (!container) return;
+
+  let html = `<button type="button" class="filter-pill ${activeCategoryFilter === 'all' ? 'active' : ''}" onclick="setCategoryFilter('all')">All Categories</button>`;
+  vehicleTypesList.forEach(t => {
+    html += `<button type="button" class="filter-pill ${activeCategoryFilter === t.id ? 'active' : ''}" onclick="setCategoryFilter('${t.id}')">${t.icon} ${t.name}</button>`;
+  });
+  container.innerHTML = html;
+}
+
+window.setCategoryFilter = function(catId) {
+  activeCategoryFilter = catId;
+  renderCategoryFilters();
+  renderFullVehiclesRegistry();
+};
+
+// Full Vehicles Registry View
+async function renderFullVehiclesRegistry() {
+  const listContainer = document.getElementById('fullVehiclesList');
+  const countText = document.getElementById('registryCountText');
+  const searchQuery = document.getElementById('registrySearchInput')?.value.trim().toUpperCase() || '';
+  if (!listContainer) return;
+
+  const parkedVehicles = await window.db.getCurrentlyParked();
+  let filtered = parkedVehicles;
+
+  // Filter by category
+  if (activeCategoryFilter !== 'all') {
+    filtered = filtered.filter(s => s.vehicle_type_id === activeCategoryFilter);
+  }
+
+  // Filter by search query
+  if (searchQuery) {
+    filtered = filtered.filter(s => s.plate_number.includes(searchQuery) || s.ticket_no.includes(searchQuery));
+  }
+
+  if (countText) {
+    countText.textContent = `Parked Vehicles (${filtered.length} found)`;
+  }
+
+  if (filtered.length === 0) {
+    listContainer.innerHTML = '<div style="color:var(--text-muted);text-align:center;padding:32px;">No matching vehicles found.</div>';
+    return;
+  }
+
+  listContainer.innerHTML = filtered.map(session => {
+    const typeObj = vehicleTypesList.find(v => v.id === session.vehicle_type_id) || { name: 'Vehicle', icon: '🚗' };
+    const entryDate = new Date(session.entry_time);
+    const timeFormatted = entryDate.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    const durationMins = Math.max(1, Math.round((new Date() - entryDate) / 60000));
+    const hours = Math.floor(durationMins / 60);
+    const mins = durationMins % 60;
+    const durStr = hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
+
+    return `
+      <div class="session-item" style="flex-direction:column;align-items:stretch;gap:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="display:flex;align-items:center;gap:10px;">
+            <span style="font-size:24px;">${typeObj.icon}</span>
+            <div>
+              <span class="plate-pill">${session.plate_number}</span>
+              <div style="font-size:11px;color:var(--text-muted);margin-top:2px;">Ticket #${session.ticket_no}</div>
+            </div>
+          </div>
+          <div class="session-meta">
+            <span class="session-type">${typeObj.name}</span>
+            <span class="session-time">In: ${timeFormatted} (${durStr})</span>
+          </div>
+        </div>
+        <div class="session-actions">
+          <button type="button" class="btn-mini-action accent" onclick="directCheckout('${session.ticket_no}')">⚡ CHECKOUT</button>
+          <button type="button" class="btn-mini-action" onclick="reprintTicket('${session.id}')">🖨️ REPRINT</button>
+        </div>
+      </div>
+    `;
+  }).join('');
+}
+
+// Quick Action: Direct Checkout from Vehicles Registry
+window.directCheckout = function(ticketNo) {
+  const exitModal = document.getElementById('exitModal');
+  document.getElementById('exitTicketInput').value = ticketNo;
+  exitModal.classList.add('active');
+  executeExitLookup(ticketNo);
+};
+
+// Quick Action: Reprint Ticket from Vehicles Registry
+window.reprintTicket = async function(sessionId) {
+  const session = await window.db.get('parking_sessions', sessionId);
+  if (!session) return;
+  const typeObj = vehicleTypesList.find(v => v.id === session.vehicle_type_id) || { name: 'Vehicle', base_rate: 50, hourly_rate: 30 };
+  const settingsList = await window.db.getAll('settings');
+  const settingsMap = {};
+  settingsList.forEach(s => settingsMap[s.key] = s.value);
+
+  try {
+    await window.parkproPrinter.printTicket(session, typeObj, settingsMap);
+    alert(`Reprinted Ticket #${session.ticket_no} for Plate ${session.plate_number}`);
+  } catch (err) {
+    alert('Reprint failed: ' + err.message);
+  }
+};
 
 // Global Tab & Setting Handlers
 window.switchSettingsTab = function(tabName) {
@@ -151,11 +296,97 @@ window.toggleReceiptWidth = function(width) {
   }
 };
 
+// Comprehensive Exit Checkout Processor
+async function executeExitLookup(query, options = {}) {
+  const exitDetailsBox = document.getElementById('exitDetailsBox');
+  const confirmBtn = document.getElementById('btnConfirmExit');
+  const tamperAlert = document.getElementById('exitTamperAlert');
+
+  tamperAlert.style.display = 'none';
+
+  // Check if query is formatted QR payload: "ticketNo|plateNumber|qrSignature"
+  let verification = null;
+  if (query.includes('|')) {
+    verification = await window.qrVerifier.verifyTicket(query);
+    if (!verification.valid && verification.tampered) {
+      tamperAlert.style.display = 'block';
+      tamperAlert.textContent = verification.reason;
+    }
+  }
+
+  const parked = await window.db.getCurrentlyParked();
+  const session = verification?.session || parked.find(s => s.ticket_no === query || s.plate_number === query);
+
+  if (!session) {
+    alert('No active parked vehicle found matching: ' + query);
+    return;
+  }
+
+  currentExitSession = session;
+  const typeObj = vehicleTypesList.find(v => v.id === session.vehicle_type_id) || {
+    name: 'Vehicle',
+    base_rate: 60,
+    hourly_rate: 50,
+    grace_period_mins: 10,
+    daily_max: 300,
+    night_rate: 0
+  };
+
+  const entryDate = new Date(session.entry_time);
+  const exitDate = new Date();
+
+  // Use Dynamic Fee Engine
+  currentExitFeeResult = window.feeEngine.calculateFee(entryDate, exitDate, typeObj, options);
+
+  const settingsList = await window.db.getAll('settings');
+  const currencySetting = settingsList.find(s => s.key === 'currency');
+  const currency = currencySetting?.value || 'PKR';
+
+  exitDetailsBox.style.display = 'block';
+  exitDetailsBox.innerHTML = `
+    <div style="background:var(--bg-card);padding:14px;border-radius:var(--radius-md);display:flex;flex-direction:column;gap:6px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="color:var(--text-muted);">Plate Number:</span>
+        <span class="plate-pill">${session.plate_number}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--text-muted);">Ticket #:</span>
+        <strong>${session.ticket_no}</strong>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--text-muted);">Vehicle Type:</span>
+        <span>${typeObj.name}</span>
+      </div>
+      <div style="display:flex;justify-content:space-between;">
+        <span style="color:var(--text-muted);">Duration:</span>
+        <span>${currentExitFeeResult.durationMins} mins (${currentExitFeeResult.durationHours} hr)</span>
+      </div>
+      ${currentExitFeeResult.isGracePeriod ? '<div style="color:var(--accent-warning);font-size:12px;font-weight:700;">★ Within Grace Period (Free Exit)</div>' : ''}
+      ${currentExitFeeResult.daysCount > 0 ? `<div style="font-size:12px;color:var(--text-muted);">${currentExitFeeResult.daysCount} Full Day(s) capped: ${currentExitFeeResult.dailyAmount} ${currency}</div>` : ''}
+      ${currentExitFeeResult.nightSurcharge > 0 ? `<div style="font-size:12px;color:var(--text-muted);">Night Tariff Applied: +${currentExitFeeResult.nightSurcharge} ${currency}</div>` : ''}
+      ${options.isLostTicket ? `<div style="color:#f87171;font-size:12px;font-weight:700;">⚠️ Lost Ticket Penalty Applied: +${options.penaltyFee} ${currency}</div>` : ''}
+      <hr style="border:none;border-top:1px solid var(--border-color);margin:4px 0;">
+      <div style="display:flex;justify-content:space-between;align-items:center;">
+        <span style="font-size:16px;font-weight:700;">Total Payable:</span>
+        <span style="font-size:22px;font-weight:800;color:var(--accent-success);">${currentExitFeeResult.totalFee} ${currency}</span>
+      </div>
+    </div>
+  `;
+
+  confirmBtn.style.display = 'block';
+}
+
 function setupEventListeners() {
   // Lock Button
   const btnLock = document.getElementById('btnLockApp');
   if (btnLock) {
     btnLock.onclick = () => window.auth.lock();
+  }
+
+  // Live Registry Search Listener
+  const registrySearch = document.getElementById('registrySearchInput');
+  if (registrySearch) {
+    registrySearch.addEventListener('input', () => renderFullVehiclesRegistry());
   }
 
   // Camera OCR Elements
@@ -194,7 +425,6 @@ function setupEventListeners() {
   if (btnSnapOcr) {
     btnSnapOcr.onclick = () => {
       window.cameraOcr.captureAndScanPlate();
-      // Generate sample plate simulation if on desktop or auto-format
       const samplePlates = ['LEE-24-9102', 'ICT-843', 'KHI-5512', 'ISB-1092', 'LHR-304'];
       const randomPlate = samplePlates[Math.floor(Math.random() * samplePlates.length)];
       plateInputField.value = randomPlate;
@@ -347,10 +577,15 @@ function setupEventListeners() {
     document.getElementById('exitTicketInput').value = '';
     document.getElementById('exitDetailsBox').style.display = 'none';
     document.getElementById('btnConfirmExit').style.display = 'none';
+    document.getElementById('exitTamperAlert').style.display = 'none';
     exitModal.classList.add('active');
   };
 
   document.getElementById('btnCloseExit').onclick = () => {
+    if (window.qrVerifier.isScanning) {
+      window.qrVerifier.stopQrScanner();
+      document.getElementById('exitCameraBox').style.display = 'none';
+    }
     exitModal.classList.remove('active');
   };
 
@@ -452,86 +687,100 @@ function setupEventListeners() {
     alert(`Ticket #${ticketNo} Issued!\nPlate: ${plateNumber}\nCategory: ${selectedVehicleType.name}\nTicket printed.`);
   };
 
-  // Exit Search and Dynamic Fee Calculation Engine
-  document.getElementById('btnSearchExit').onclick = async () => {
-    const query = document.getElementById('exitTicketInput').value.trim().toUpperCase();
-    if (!query) return;
+  // Exit: Live QR Code Scanner Trigger
+  const btnStartQrScanner = document.getElementById('btnStartQrScanner');
+  const exitCameraBox = document.getElementById('exitCameraBox');
+  const exitQrVideo = document.getElementById('exitQrVideo');
 
-    let session = null;
-    const parked = await window.db.getCurrentlyParked();
-    session = parked.find(s => s.ticket_no === query || s.plate_number === query);
-
-    if (!session) {
-      alert('No active parked vehicle found matching ticket or plate.');
-      return;
-    }
-
-    const typeObj = vehicleTypesList.find(v => v.id === session.vehicle_type_id) || {
-      name: 'Vehicle',
-      base_rate: 60,
-      hourly_rate: 50,
-      grace_period_mins: 10,
-      daily_max: 300,
-      night_rate: 0
+  if (btnStartQrScanner) {
+    btnStartQrScanner.onclick = async () => {
+      if (window.qrVerifier.isScanning) {
+        window.qrVerifier.stopQrScanner();
+        exitCameraBox.style.display = 'none';
+        btnStartQrScanner.textContent = '📷 SCAN TICKET QR';
+      } else {
+        try {
+          exitCameraBox.style.display = 'block';
+          btnStartQrScanner.textContent = '⏹️ STOP QR SCANNER';
+          await window.qrVerifier.startQrScanner(exitQrVideo, (scannedRaw) => {
+            exitCameraBox.style.display = 'none';
+            btnStartQrScanner.textContent = '📷 SCAN TICKET QR';
+            executeExitLookup(scannedRaw);
+          });
+        } catch (err) {
+          alert('Could not start QR camera: ' + err.message);
+          exitCameraBox.style.display = 'none';
+          btnStartQrScanner.textContent = '📷 SCAN TICKET QR';
+        }
+      }
     };
+  }
 
-    const entryDate = new Date(session.entry_time);
+  // Exit: Lost Ticket Resolution Toggle
+  const btnLostTicketToggle = document.getElementById('btnLostTicketToggle');
+  if (btnLostTicketToggle) {
+    btnLostTicketToggle.onclick = async () => {
+      const plate = prompt('LOST TICKET RESOLUTION\nEnter registered vehicle license plate:');
+      if (!plate) return;
+
+      const formattedPlate = plate.trim().toUpperCase();
+      const active = await window.db.getActiveSessionByPlate(formattedPlate);
+      if (!active) {
+        alert('No active parked vehicle found matching: ' + formattedPlate);
+        return;
+      }
+
+      const proceed = confirm(`Apply Lost Ticket Penalty (500 PKR) for plate ${formattedPlate}?`);
+      if (!proceed) return;
+
+      // Log in audit trail
+      await window.db.put('audit_logs', {
+        user_id: window.auth.currentUser?.id || 'usr_admin',
+        action: 'LOST_TICKET_PENALTY_APPLIED',
+        details: `Lost ticket for plate ${formattedPlate}, Ticket #${active.ticket_no}`,
+        timestamp: new Date().toISOString()
+      });
+
+      document.getElementById('exitTicketInput').value = active.ticket_no;
+      executeExitLookup(active.ticket_no, { isLostTicket: true, penaltyFee: 500 });
+    };
+  }
+
+  // Exit: Search Button Trigger
+  document.getElementById('btnSearchExit').onclick = () => {
+    const query = document.getElementById('exitTicketInput').value.trim().toUpperCase();
+    if (query) executeExitLookup(query);
+  };
+
+  // Exit: Confirm Settlement & Gate Release
+  document.getElementById('btnConfirmExit').onclick = async () => {
+    if (!currentExitSession || !currentExitFeeResult) return;
+
+    const operatorId = window.auth.currentUser ? window.auth.currentUser.id : 'usr_admin';
     const exitDate = new Date();
 
-    // Use Advanced Fee Engine
-    const feeResult = window.feeEngine.calculateFee(entryDate, exitDate, typeObj);
+    currentExitSession.exit_time = exitDate.toISOString();
+    currentExitSession.operator_exit_id = operatorId;
+    currentExitSession.total_amount = currentExitFeeResult.totalFee;
+    currentExitSession.penalty_amount = currentExitFeeResult.penaltyAmount || 0;
+    currentExitSession.status = 'completed';
+    currentExitSession.sync_status = 'pending';
+    currentExitSession.updated_at = exitDate.toISOString();
 
-    const settingsList = await window.db.getAll('settings');
-    const currencySetting = settingsList.find(s => s.key === 'currency');
-    const currency = currencySetting?.value || 'PKR';
+    await window.db.put('parking_sessions', currentExitSession);
+    await window.db.enqueueSync('parking_sessions', currentExitSession.id, 'UPDATE', currentExitSession);
 
-    document.getElementById('exitDetailsBox').style.display = 'block';
-    document.getElementById('exitDetailsBox').innerHTML = `
-      <div style="background:var(--bg-card);padding:14px;border-radius:var(--radius-md);display:flex;flex-direction:column;gap:6px;">
-        <div style="display:flex;justify-content:space-between;">
-          <span style="color:var(--text-muted);">Plate Number:</span>
-          <span class="plate-pill">${session.plate_number}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;">
-          <span style="color:var(--text-muted);">Ticket #:</span>
-          <strong>${session.ticket_no}</strong>
-        </div>
-        <div style="display:flex;justify-content:space-between;">
-          <span style="color:var(--text-muted);">Vehicle Type:</span>
-          <span>${typeObj.name}</span>
-        </div>
-        <div style="display:flex;justify-content:space-between;">
-          <span style="color:var(--text-muted);">Duration:</span>
-          <span>${feeResult.durationMins} mins (${feeResult.durationHours} hr)</span>
-        </div>
-        ${feeResult.isGracePeriod ? '<div style="color:var(--accent-warning);font-size:12px;font-weight:700;">★ Within Grace Period (Free Exit)</div>' : ''}
-        ${feeResult.daysCount > 0 ? `<div style="font-size:12px;color:var(--text-muted);">${feeResult.daysCount} Full Day(s) capped: ${feeResult.dailyAmount} ${currency}</div>` : ''}
-        ${feeResult.nightSurcharge > 0 ? `<div style="font-size:12px;color:var(--text-muted);">Night Tariff Applied: +${feeResult.nightSurcharge} ${currency}</div>` : ''}
-        <hr style="border:none;border-top:1px solid var(--border-color);margin:4px 0;">
-        <div style="display:flex;justify-content:space-between;align-items:center;">
-          <span style="font-size:16px;font-weight:700;">Total Fee:</span>
-          <span style="font-size:22px;font-weight:800;color:var(--accent-success);">${feeResult.totalFee} ${currency}</span>
-        </div>
-      </div>
-    `;
+    if (window.qrVerifier.isScanning) {
+      window.qrVerifier.stopQrScanner();
+      exitCameraBox.style.display = 'none';
+    }
 
-    const confirmBtn = document.getElementById('btnConfirmExit');
-    confirmBtn.style.display = 'block';
-    confirmBtn.onclick = async () => {
-      const operatorId = window.auth.currentUser ? window.auth.currentUser.id : 'usr_admin';
-      session.exit_time = exitDate.toISOString();
-      session.operator_exit_id = operatorId;
-      session.total_amount = feeResult.totalFee;
-      session.status = 'completed';
-      session.sync_status = 'pending';
-      session.updated_at = exitDate.toISOString();
+    exitModal.classList.remove('active');
+    await refreshDashboard();
+    if (document.getElementById('viewVehicles').style.display !== 'none') {
+      renderFullVehiclesRegistry();
+    }
 
-      await window.db.put('parking_sessions', session);
-      await window.db.enqueueSync('parking_sessions', session.id, 'UPDATE', session);
-
-      exitModal.classList.remove('active');
-      await refreshDashboard();
-      alert(`Payment Settled!\nCollected: ${feeResult.totalFee} ${currency}\nGate opened.`);
-    };
+    alert(`Payment Settled!\nCollected: ${currentExitFeeResult.totalFee} PKR\nGate opened.`);
   };
 }
