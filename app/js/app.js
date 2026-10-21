@@ -32,16 +32,17 @@ document.addEventListener('DOMContentLoaded', async () => {
   window.addEventListener('offline', updateNetworkStatus);
   updateNetworkStatus();
 
-  // 3. Initialize Local Database
+  // 3. Initialize Local Database and Authentication
   try {
     await window.db.init();
+    await window.auth.init();
     await loadVehicleTypes();
     await refreshDashboard();
   } catch (err) {
-    console.error('[App] Database initialization failed:', err);
+    console.error('[App] Database/Auth initialization failed:', err);
   }
 
-  // 4. Modal & Action Event Listeners
+  // 4. Modal, Lock & Action Event Listeners
   setupEventListeners();
 });
 
@@ -118,6 +119,54 @@ async function refreshDashboard() {
 }
 
 function setupEventListeners() {
+  // Lock Button
+  const btnLock = document.getElementById('btnLockApp');
+  if (btnLock) {
+    btnLock.onclick = () => window.auth.lock();
+  }
+
+  // First-Run Setup Wizard Form Submission
+  const wizardForm = document.getElementById('setupWizardForm');
+  if (wizardForm) {
+    wizardForm.onsubmit = async (e) => {
+      e.preventDefault();
+      const lotName = document.getElementById('wizardLotName').value.trim();
+      const lotAddress = document.getElementById('wizardLotAddress').value.trim();
+      const currency = document.getElementById('wizardCurrency').value.trim();
+      const capacity = document.getElementById('wizardCapacity').value.trim();
+      const adminPin = document.getElementById('wizardAdminPin').value.trim();
+      const adminPassword = document.getElementById('wizardAdminPassword').value.trim();
+
+      if (adminPin.length !== 4) {
+        alert('PIN must be exactly 4 digits.');
+        return;
+      }
+
+      const pinHash = await window.db.hash(adminPin);
+      const passwordHash = await window.db.hash(adminPassword);
+
+      // Save settings
+      await window.db.put('settings', { key: 'lot_name', value: lotName });
+      await window.db.put('settings', { key: 'lot_address', value: lotAddress });
+      await window.db.put('settings', { key: 'currency', value: currency });
+      await window.db.put('settings', { key: 'capacity', value: capacity });
+      await window.db.put('settings', { key: 'setup_completed', value: 'true' });
+
+      // Update admin credentials
+      const adminUser = await window.db.get('users', 'usr_admin');
+      if (adminUser) {
+        adminUser.pin_hash = pinHash;
+        adminUser.password_hash = passwordHash;
+        await window.db.put('users', adminUser);
+      }
+
+      window.auth.hideSetupWizard();
+      await refreshDashboard();
+      window.auth.showPinModal();
+      alert('Setup Completed Successfully! Log in with your new PIN.');
+    };
+  }
+
   // Modals
   const entryModal = document.getElementById('entryModal');
   const exitModal = document.getElementById('exitModal');
@@ -168,6 +217,7 @@ function setupEventListeners() {
     const ticketNo = 'PK-' + Math.floor(100000 + Math.random() * 900000);
     const sessionId = 'ses_' + Date.now() + '_' + Math.random().toString(36).substring(2, 7);
     const entryTime = new Date().toISOString();
+    const operatorId = window.auth.currentUser ? window.auth.currentUser.id : 'usr_admin';
 
     const newSession = {
       id: sessionId,
@@ -176,7 +226,7 @@ function setupEventListeners() {
       vehicle_type_id: selectedVehicleType.id,
       entry_time: entryTime,
       exit_time: null,
-      operator_entry_id: 'usr_admin',
+      operator_entry_id: operatorId,
       operator_exit_id: null,
       rate_applied: selectedVehicleType.base_rate,
       total_amount: 0,
@@ -198,7 +248,6 @@ function setupEventListeners() {
   };
 
   // Exit Search and Calculation
-  let currentExitSession = null;
   document.getElementById('btnSearchExit').onclick = async () => {
     const query = document.getElementById('exitTicketInput').value.trim().toUpperCase();
     if (!query) return;
@@ -212,7 +261,6 @@ function setupEventListeners() {
       return;
     }
 
-    currentExitSession = session;
     const typeObj = vehicleTypesList.find(v => v.id === session.vehicle_type_id) || { name: 'Vehicle', base_rate: 50, hourly_rate: 30 };
     
     const entryDate = new Date(session.entry_time);
@@ -256,7 +304,9 @@ function setupEventListeners() {
     const confirmBtn = document.getElementById('btnConfirmExit');
     confirmBtn.style.display = 'block';
     confirmBtn.onclick = async () => {
+      const operatorId = window.auth.currentUser ? window.auth.currentUser.id : 'usr_admin';
       session.exit_time = exitDate.toISOString();
+      session.operator_exit_id = operatorId;
       session.total_amount = calculatedFee;
       session.status = 'completed';
       session.sync_status = 'pending';

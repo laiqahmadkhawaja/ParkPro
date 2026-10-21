@@ -458,3 +458,276 @@ body {
   font-weight: 700;
   cursor: pointer;
 }
+
+/* --- Phase 2: Auth, RBAC & Wizard Styles --- */
+
+.user-profile-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 13px;
+  font-weight: 600;
+  border: 1px solid var(--border-color);
+}
+
+.role-tag {
+  font-size: 10px;
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-weight: 800;
+  text-transform: uppercase;
+}
+
+.role-tag.admin {
+  background: #7c3aed;
+  color: #fff;
+}
+
+.role-tag.manager {
+  background: #0284c7;
+  color: #fff;
+}
+
+.role-tag.operator {
+  background: #059669;
+  color: #fff;
+}
+
+.btn-lock {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  padding: 4px;
+  border-radius: var(--radius-sm);
+}
+
+.btn-lock:active {
+  color: var(--text-main);
+}
+
+/* Fullscreen PIN Modal */
+.pin-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-primary);
+  z-index: 200;
+  display: none;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  padding: 24px 16px;
+}
+
+.pin-overlay.active {
+  display: flex;
+}
+
+.pin-brand-title {
+  font-size: 26px;
+  font-weight: 800;
+  margin-bottom: 4px;
+  letter-spacing: -0.5px;
+}
+
+.pin-subtitle {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: 24px;
+}
+
+/* User Selection Carousel/Grid */
+.pin-user-grid {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 24px;
+  max-width: 360px;
+  width: 100%;
+  overflow-x: auto;
+  padding: 4px 0;
+}
+
+.pin-user-btn {
+  background: var(--bg-surface);
+  border: 2px solid transparent;
+  border-radius: var(--radius-md);
+  padding: 10px 14px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  color: var(--text-main);
+  min-width: 90px;
+  flex-shrink: 0;
+}
+
+.pin-user-btn.selected {
+  border-color: var(--accent-primary);
+  background: rgba(59, 130, 246, 0.15);
+}
+
+.user-avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: var(--bg-card);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  color: #fff;
+}
+
+.user-name {
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.user-role-badge {
+  font-size: 10px;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+/* Masked PIN Indicator Dots */
+.pin-dots-wrapper {
+  display: flex;
+  gap: 16px;
+  margin-bottom: 32px;
+}
+
+.pin-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 2px solid var(--border-color);
+  background: transparent;
+  transition: all 0.15s ease;
+}
+
+.pin-dot.filled {
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+  transform: scale(1.15);
+  box-shadow: 0 0 10px rgba(59, 130, 246, 0.5);
+}
+
+/* 3x4 Numpad Grid */
+.numpad-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+  max-width: 280px;
+  width: 100%;
+}
+
+.numpad-btn {
+  width: 76px;
+  height: 76px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  font-size: 28px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: transform 0.08s ease, background-color 0.1s ease;
+  margin: 0 auto;
+}
+
+.numpad-btn:active {
+  transform: scale(0.92);
+  background: var(--bg-card);
+}
+
+.numpad-btn.action-num {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-muted);
+}
+
+/* First-Run Setup Wizard */
+.wizard-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg-primary);
+  z-index: 300;
+  display: none;
+  padding: 24px 16px;
+  overflow-y: auto;
+}
+
+.wizard-overlay.active {
+  display: block;
+}
+
+.wizard-container {
+  max-width: 500px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.wizard-header {
+  text-align: center;
+  margin-bottom: 8px;
+}
+
+.wizard-badge {
+  background: rgba(59, 130, 246, 0.2);
+  color: #60a5fa;
+  padding: 4px 12px;
+  border-radius: 9999px;
+  font-size: 12px;
+  font-weight: 700;
+  display: inline-block;
+  margin-bottom: 8px;
+}
+
+.wizard-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-color);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.form-label {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.form-input {
+  background: var(--bg-primary);
+  border: 1px solid var(--border-color);
+  color: var(--text-main);
+  padding: 12px 14px;
+  border-radius: var(--radius-md);
+  font-size: 15px;
+}
+
+.form-input:focus {
+  border-color: var(--accent-primary);
+  outline: none;
+}
