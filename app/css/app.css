@@ -962,3 +962,27 @@ body {
 .progress-bar.danger {
   background: linear-gradient(90deg, #ef4444, #b91c1c);
 }
+
+/* --- Phase 10: Urdu RTL Mode Styles --- */
+
+.rtl-mode {
+  direction: rtl;
+  text-align: right;
+}
+
+.rtl-mode .brand-wrapper {
+  flex-direction: row-reverse;
+}
+
+.rtl-mode .session-meta {
+  align-items: flex-start;
+}
+
+.rtl-mode .search-input {
+  padding: 12px 40px 12px 14px;
+}
+
+.rtl-mode .search-icon {
+  left: auto;
+  right: 14px;
+}

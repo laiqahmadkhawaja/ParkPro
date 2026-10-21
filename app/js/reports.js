@@ -298,7 +298,20 @@ class ParkProReports {
     });
 
     const discMsg = discrepancy === 0 ? 'Drawer Balanced! (0 discrepancy)' : (discrepancy > 0 ? `Drawer OVER by +${discrepancy} PKR` : `Drawer SHORT by ${discrepancy} PKR`);
-    alert(`DAILY Z-REPORT SUMMARY\n\nStarting Float: ${this.activeShift.starting_float} PKR\nCash Collected: ${collectedDuringShift} PKR\nCounted Cash: ${countedCash} PKR\n\n${discMsg}\n\nShift closed.`);
+    
+    // Dispatch Daily Z-Report print to thermal printer
+    try {
+      const settingsList = await window.db.getAll('settings');
+      const settingsMap = {};
+      settingsList.forEach(s => settingsMap[s.key] = s.value);
+      if (window.parkproPrinter) {
+        await window.parkproPrinter.printZReport(this.activeShift, settingsMap);
+      }
+    } catch (printErr) {
+      console.warn('[Z-Report] Print dispatch note:', printErr);
+    }
+
+    alert(`DAILY Z-REPORT SUMMARY\n\nStarting Float: ${this.activeShift.starting_float} PKR\nCash Collected: ${collectedDuringShift} PKR\nCounted Cash: ${countedCash} PKR\n\n${discMsg}\n\nZ-Report dispatched to printer.`);
 
     this.activeShift = null;
     this.updateShiftUI();

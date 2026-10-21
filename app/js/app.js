@@ -46,6 +46,9 @@ document.addEventListener('DOMContentLoaded', async () => {
     if (window.parkproSync) {
       window.parkproSync.init();
     }
+    if (window.parkproI18n) {
+      window.parkproI18n.init();
+    }
     await loadVehicleTypes();
     await refreshDashboard();
   } catch (err) {
@@ -372,6 +375,16 @@ async function executeExitLookup(query, options = {}) {
   // Use Dynamic Fee Engine
   currentExitFeeResult = window.feeEngine.calculateFee(entryDate, exitDate, typeObj, options);
 
+  // VIP Pass Check
+  let vipPassNote = '';
+  if (window.parkproI18n) {
+    const vipPass = await window.parkproI18n.checkVipPass(session.plate_number);
+    if (vipPass) {
+      currentExitFeeResult.totalFee = 0;
+      vipPassNote = `<div style="color:#34d399;font-size:12px;font-weight:700;">★ VIP PASS ACTIVE: ${vipPass.owner_name} (Expires: ${vipPass.expires_at})</div>`;
+    }
+  }
+
   const settingsList = await window.db.getAll('settings');
   const currencySetting = settingsList.find(s => s.key === 'currency');
   const currency = currencySetting?.value || 'PKR';
@@ -399,6 +412,7 @@ async function executeExitLookup(query, options = {}) {
       ${currentExitFeeResult.daysCount > 0 ? `<div style="font-size:12px;color:var(--text-muted);">${currentExitFeeResult.daysCount} Full Day(s) capped: ${currentExitFeeResult.dailyAmount} ${currency}</div>` : ''}
       ${currentExitFeeResult.nightSurcharge > 0 ? `<div style="font-size:12px;color:var(--text-muted);">Night Tariff Applied: +${currentExitFeeResult.nightSurcharge} ${currency}</div>` : ''}
       ${options.isLostTicket ? `<div style="color:#f87171;font-size:12px;font-weight:700;">⚠️ Lost Ticket Penalty Applied: +${options.penaltyFee} ${currency}</div>` : ''}
+      ${vipPassNote}
       <hr style="border:none;border-top:1px solid var(--border-color);margin:4px 0;">
       <div style="display:flex;justify-content:space-between;align-items:center;">
         <span style="font-size:16px;font-weight:700;">Total Payable:</span>
@@ -643,6 +657,22 @@ function setupEventListeners() {
     if (existing) {
       alert(`DUPLICATE ENTRY BLOCKED!\nPlate ${plateNumber} is already parked inside under Ticket #${existing.ticket_no}.`);
       return;
+    }
+
+    // 1.5. Security Blacklist Check
+    if (window.parkproI18n) {
+      const blacklisted = await window.parkproI18n.checkBlacklist(plateNumber);
+      if (blacklisted) {
+        const allowEntry = confirm(`🚨 SECURITY ALERT: BLACKLISTED / STOLEN VEHICLE DETECTED!\n\nPlate: ${plateNumber}\nReason: ${blacklisted.reason || 'Flagged vehicle'}\n\nDo you want to proceed and log an incident?`);
+        if (!allowEntry) return;
+
+        await window.db.put('audit_logs', {
+          user_id: window.auth.currentUser?.id || 'usr_admin',
+          action: 'BLACKLISTED_VEHICLE_LOGGED',
+          details: `Blacklisted plate ${plateNumber} entered. Reason: ${blacklisted.reason}`,
+          timestamp: new Date().toISOString()
+        });
+      }
     }
 
     // 2. Capacity Check

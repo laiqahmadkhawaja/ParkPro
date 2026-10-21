@@ -230,6 +230,69 @@ class ParkProPrinter {
     console.warn('[Printer] No physical Bluetooth bridge available. Falling back to digital ticket preview.');
     return false;
   }
+
+  /**
+   * Generate and print Daily Z-Report for closed shifts
+   */
+  async printZReport(shift, settings) {
+    const is80 = (settings.printer_width || this.paperWidth) === '80';
+    const cols = is80 ? 48 : 32;
+    const divider = '='.repeat(cols) + '\n';
+    const lotName = settings.lot_name || 'ParkPro Parking';
+    const currency = settings.currency || 'PKR';
+
+    const encoder = new TextEncoder();
+    const bytes = [];
+    const pushCmd = (...cmds) => bytes.push(...cmds);
+    const pushText = (str) => {
+      const enc = encoder.encode(str);
+      for (let i = 0; i < enc.length; i++) bytes.push(enc[i]);
+    };
+
+    // Initialize (ESC @) & Center Align (ESC a 1)
+    pushCmd(0x1B, 0x40);
+    pushCmd(0x1B, 0x61, 0x01);
+
+    pushCmd(0x1B, 0x45, 0x01); // Bold
+    pushText(lotName + '\n');
+    pushCmd(0x1D, 0x21, 0x11); // Double size
+    pushText('DAILY Z-REPORT\n');
+    pushCmd(0x1D, 0x21, 0x00); // Normal
+    pushCmd(0x1B, 0x45, 0x00); // Bold OFF
+
+    pushText(divider);
+
+    // Left Align Details (ESC a 0)
+    pushCmd(0x1B, 0x61, 0x00);
+    pushText(`SHIFT ID     : ${shift.id}\n`);
+    pushText(`OPERATOR     : ${shift.operator_id}\n`);
+    pushText(`OPEN TIME    : ${new Date(shift.start_time).toLocaleString()}\n`);
+    pushText(`CLOSE TIME   : ${new Date(shift.end_time || Date.now()).toLocaleString()}\n`);
+
+    pushText('-'.repeat(cols) + '\n');
+    pushText(`START FLOAT  : ${shift.starting_float} ${currency}\n`);
+    pushText(`COLLECTED    : ${shift.total_cash_collected} ${currency}\n`);
+    pushText(`EXPECTED     : ${shift.expected_cash} ${currency}\n`);
+    pushText(`COUNTED CASH : ${shift.actual_cash} ${currency}\n`);
+    pushText(`DISCREPANCY  : ${shift.discrepancy >= 0 ? '+' : ''}${shift.discrepancy} ${currency}\n`);
+
+    pushText(divider);
+    pushCmd(0x1B, 0x61, 0x01);
+    pushText('OPERATOR SIGNATURE: _____________\n\n');
+    pushText('SUPERVISOR SIGNATURE: ___________\n\n');
+
+    pushCmd(0x1B, 0x64, 0x03);
+    pushCmd(0x1D, 0x56, 0x00);
+
+    const rawBytes = new Uint8Array(bytes);
+
+    if (this.isNativeAvailable() && this.selectedPrinterMac) {
+      let binary = '';
+      for (let i = 0; i < rawBytes.byteLength; i++) binary += String.fromCharCode(rawBytes[i]);
+      return window.AndroidBridge.printBluetooth(this.selectedPrinterMac, btoa(binary));
+    }
+    return true;
+  }
 }
 
 // Global Printer Instance
