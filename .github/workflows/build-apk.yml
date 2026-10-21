@@ -22,47 +22,56 @@ jobs:
         with:
           distribution: 'temurin'
           java-version: '17'
-          cache: 'gradle'
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
 
-      - name: Make Gradle Wrapper Executable
-        working-directory: ./android
-        run: |
-          if [ ! -f "gradlew" ]; then
-            gradle wrapper --gradle-version 8.5
-          fi
-          chmod +x gradlew
+      - name: Set up Gradle 8.2.2
+        uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: '8.2.2'
 
       - name: Build Android Release APK
         working-directory: ./android
         run: |
-          ./gradlew assembleRelease --stacktrace --no-daemon
+          gradle assembleRelease --stacktrace --no-daemon
 
-      - name: Sign Android APK
-        uses: r0adkll/sign-android-release@v1
-        id: sign_app
-        if: ${{ env.ANDROID_KEYSTORE_BASE64 != '' }}
-        env:
-          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-        with:
-          releaseDirectory: android/app/build/outputs/apk/release
-          signingKeyBase64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-          alias: ${{ secrets.ANDROID_KEY_ALIAS }}
-          keyStorePassword: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
-          keyPassword: ${{ secrets.ANDROID_KEY_PASSWORD }}
+      - name: Sign APK (Using Secret Keystore or Auto-Generated Release Key)
+        run: |
+          BUILD_TOOLS_DIR=$(ls -d $ANDROID_HOME/build-tools/* | sort -V | tail -n 1)
+          APKSIGNER="$BUILD_TOOLS_DIR/apksigner"
+          
+          if [ -n "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" ]; then
+            echo "Using provided repository secrets keystore..."
+            echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > release.keystore
+            KEY_ALIAS="${{ secrets.ANDROID_KEY_ALIAS || 'parkpro' }}"
+            STORE_PASS="${{ secrets.ANDROID_KEYSTORE_PASSWORD || 'android' }}"
+            KEY_PASS="${{ secrets.ANDROID_KEY_PASSWORD || 'android' }}"
+          else
+            echo "No custom keystore secrets detected. Generating release signing key..."
+            keytool -genkey -v -keystore release.keystore -alias parkpro -keyalg RSA -keysize 2048 -validity 10000 -storepass parkpro123 -keypass parkpro123 -dname "CN=ParkPro, OU=Mobile, O=ParkPro, L=City, S=State, C=PK"
+            KEY_ALIAS="parkpro"
+            STORE_PASS="parkpro123"
+            KEY_PASS="parkpro123"
+          fi
+
+          RAW_APK=$(find android/app/build/outputs/apk/release -name "*.apk" | head -n 1)
+          echo "Signing: $RAW_APK"
+          $APKSIGNER sign --ks release.keystore --ks-pass pass:$STORE_PASS --key-pass pass:$KEY_PASS --ks-key-alias $KEY_ALIAS --out android/app/build/outputs/apk/release/ParkPro-v1.0-release.apk "$RAW_APK"
+          
+          echo "Verifying signature..."
+          $APKSIGNER verify android/app/build/outputs/apk/release/ParkPro-v1.0-release.apk
 
       - name: Upload Signed APK Artifact
         uses: actions/upload-artifact@v4
         with:
-          name: ParkPro-Release-APK
-          path: ${{ steps.sign_app.outputs.signedReleaseFile || 'android/app/build/outputs/apk/release/*.apk' }}
+          name: ParkPro-Signed-Release-APK
+          path: android/app/build/outputs/apk/release/ParkPro-v1.0-release.apk
           retention-days: 14
 
       - name: Create GitHub Release on Tag
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
         with:
-          files: ${{ steps.sign_app.outputs.signedReleaseFile || 'android/app/build/outputs/apk/release/*.apk' }}
+          files: android/app/build/outputs/apk/release/ParkPro-v1.0-release.apk
           generate_release_notes: true
