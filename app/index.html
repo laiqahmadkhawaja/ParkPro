@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <meta name="theme-color" content="#1e293b">
+  <meta name="description" content="ParkPro: Offline-First Mobile Parking Management System">
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="css/app.css">
+  <title>ParkPro - Parking Management</title>
+</head>
+<body>
+
+  <!-- Top App Header -->
+  <header class="app-header">
+    <div class="brand-wrapper">
+      <div class="brand-logo">P</div>
+      <div class="brand-title">ParkPro</div>
+    </div>
+    <div id="networkStatus" class="status-badge">
+      <span class="status-dot"></span>
+      <span id="networkText">ONLINE</span>
+    </div>
+  </header>
+
+  <!-- Main Viewport -->
+  <main class="main-content">
+    
+    <!-- Hero Action Buttons -->
+    <section class="hero-actions">
+      <button type="button" id="btnOpenEntry" class="action-btn btn-entry">
+        <svg viewBox="0 0 24 24"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+        <span>SCAN PLATE</span>
+      </button>
+      <button type="button" id="btnOpenExit" class="action-btn btn-exit">
+        <svg viewBox="0 0 24 24"><path d="M3 5v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2H5c-1.11 0-2 .9-2 2zm12 4c0 1.66-1.34 3-3 3s-3-1.34-3-3 1.34-3 3-3 3 1.34 3 3zm-9 8c0-2 4-3.1 6-3.1s6 1.1 6 3.1v1H6v-1z"/></svg>
+        <span>EXIT SCAN</span>
+      </button>
+    </section>
+
+    <!-- Operational KPI Summary -->
+    <section class="kpi-grid">
+      <div class="kpi-card highlight">
+        <span class="kpi-title">Currently Parked</span>
+        <span id="kpiActiveParked" class="kpi-value">0</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Today's Revenue</span>
+        <span id="kpiTodayRevenue" class="kpi-value">0 PKR</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Today's Entries</span>
+        <span id="kpiTodayEntries" class="kpi-value">0</span>
+      </div>
+      <div class="kpi-card">
+        <span class="kpi-title">Today's Exits</span>
+        <span id="kpiTodayExits" class="kpi-value">0</span>
+      </div>
+    </section>
+
+    <!-- Occupancy Meter -->
+    <section class="occupancy-card">
+      <div class="occupancy-header">
+        <span>Parking Lot Capacity</span>
+        <span id="occupancyText">0 / 100 Slots (0%)</span>
+      </div>
+      <div class="progress-track">
+        <div id="occupancyBar" class="progress-bar"></div>
+      </div>
+    </section>
+
+    <!-- Parked Vehicles List -->
+    <div class="section-title">
+      <span>Currently Parked</span>
+      <span style="font-size:12px;cursor:pointer;" onclick="refreshDashboard()">🔄 Refresh</span>
+    </div>
+
+    <section id="parkedList" class="session-list">
+      <!-- Dynamically populated -->
+    </section>
+
+  </main>
+
+  <!-- Bottom Navigation Bar -->
+  <nav class="bottom-nav">
+    <button class="nav-item active">
+      <svg viewBox="0 0 24 24"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
+      <span>Dashboard</span>
+    </button>
+    <button class="nav-item">
+      <svg viewBox="0 0 24 24"><path d="M18.92 6.01C18.72 5.42 18.16 5 17.5 5h-11c-.66 0-1.21.42-1.42 1.01L3 12v8c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-1h12v1c0 .55.45 1 1 1h1c.55 0 1-.45 1-1v-8l-2.08-5.99zM6.5 16c-.83 0-1.5-.67-1.5-1.5S5.67 13 6.5 13s1.5.67 1.5 1.5S7.33 16 6.5 16zm11 0c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zM5 11l1.5-4.5h11L19 11H5z"/></svg>
+      <span>Vehicles</span>
+    </button>
+    <button class="nav-item">
+      <svg viewBox="0 0 24 24"><path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-5 14H7v-2h7v2zm3-4H7v-2h10v2zm0-4H7V7h10v2z"/></svg>
+      <span>Reports</span>
+    </button>
+    <button class="nav-item">
+      <svg viewBox="0 0 24 24"><path d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58c.18-.14.23-.41.12-.61l-1.92-3.32c-.12-.22-.37-.29-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54c-.04-.24-.24-.41-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.08-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.09.63-.09.94s.02.64.07.94l-2.03 1.58c-.18.14-.23.41-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58zM12 15.6c-1.98 0-3.6-1.62-3.6-3.6s1.62-3.6 3.6-3.6 3.6 1.62 3.6 3.6-1.62 3.6-3.6 3.6z"/></svg>
+      <span>Settings</span>
+    </button>
+  </nav>
+
+  <!-- Modal: Vehicle Entry -->
+  <div id="entryModal" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <span class="modal-title">New Vehicle Entry</span>
+        <button type="button" id="btnCloseEntry" class="close-btn">✕</button>
+      </div>
+
+      <form id="entryForm">
+        <!-- Vehicle Type Selection -->
+        <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:8px;">1. SELECT VEHICLE TYPE</label>
+        <div id="vehicleTypeGrid" class="type-grid"></div>
+
+        <!-- Camera Scanner Box -->
+        <label style="font-size:12px;font-weight:600;color:var(--text-muted);display:block;margin-bottom:8px;">2. SCAN OR ENTER PLATE</label>
+        <div class="camera-box">
+          <div style="text-align:center;color:var(--text-muted);font-size:13px;">
+            <svg style="width:36px;height:36px;fill:#64748b;margin-bottom:6px;" viewBox="0 0 24 24"><path d="M12 15c1.66 0 3-1.34 3-3s-1.34-3-3-3-3 1.34-3 3 1.34 3 3 3zm8-9h-3.17L15 4H9L7.17 6H4c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h16c1.1 0 2-.9 2-2V8c0-1.1-.9-2-2-2zm-8 13c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5z"/></svg>
+            <div>Camera Viewport (OCR Plate Scanner)</div>
+          </div>
+        </div>
+
+        <!-- Plate Input -->
+        <input type="text" id="entryPlateInput" class="plate-input-field" placeholder="ABC-1234" autocomplete="off" autocapitalize="characters" required>
+
+        <!-- Submit Button -->
+        <button type="submit" class="submit-btn">PRINT TICKET & SAVE ENTRY</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Modal: Vehicle Exit -->
+  <div id="exitModal" class="modal-overlay">
+    <div class="modal-sheet">
+      <div class="modal-header">
+        <span class="modal-title">Vehicle Exit & Settlement</span>
+        <button type="button" id="btnCloseExit" class="close-btn">✕</button>
+      </div>
+
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <label style="font-size:12px;font-weight:600;color:var(--text-muted);">SCAN QR CODE OR SEARCH TICKET/PLATE</label>
+        
+        <div style="display:flex;gap:8px;">
+          <input type="text" id="exitTicketInput" class="plate-input-field" style="margin-bottom:0;font-size:18px;text-align:left;padding:10px 14px;" placeholder="Ticket # or Plate">
+          <button type="button" id="btnSearchExit" class="submit-btn" style="width:auto;padding:0 20px;">SEARCH</button>
+        </div>
+
+        <div id="exitDetailsBox" style="display:none;"></div>
+        
+        <button type="button" id="btnConfirmExit" class="submit-btn" style="display:none;background:var(--accent-success);">COLLECT PAYMENT & OPEN GATE</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="js/db.js"></script>
+  <script src="js/app.js"></script>
+</body>
+</html>
