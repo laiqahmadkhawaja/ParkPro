@@ -1,3 +1,9 @@
+html, body {
+  overflow-x: hidden;
+  width: 100%;
+  max-width: 100vw;
+  box-sizing: border-box;
+}
 :root {
   --bg-primary: #0f172a;
   --bg-surface: #1e293b;
@@ -656,6 +662,22 @@ body {
   color: var(--text-muted);
 }
 
+/* Responsive Form Grid */
+.form-grid-2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+@media (max-width: 480px) {
+  .form-grid-2 {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+}
+
 /* First-Run Setup Wizard */
 .wizard-overlay {
   position: fixed;
@@ -663,8 +685,11 @@ body {
   background: var(--bg-primary);
   z-index: 300;
   display: none;
-  padding: 24px 16px;
+  padding: 20px 14px;
   overflow-y: auto;
+  overflow-x: hidden;
+  width: 100vw;
+  box-sizing: border-box;
 }
 
 .wizard-overlay.active {
@@ -672,11 +697,14 @@ body {
 }
 
 .wizard-container {
-  max-width: 500px;
+  max-width: 480px;
+  width: 100%;
   margin: 0 auto;
   display: flex;
   flex-direction: column;
   gap: 16px;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .wizard-header {
@@ -699,16 +727,22 @@ body {
   background: var(--bg-surface);
   border: 1px solid var(--border-color);
   border-radius: var(--radius-lg);
-  padding: 20px;
+  padding: 18px 14px;
   display: flex;
   flex-direction: column;
   gap: 14px;
+  width: 100%;
+  box-sizing: border-box;
+  overflow-x: hidden;
 }
 
 .form-group {
   display: flex;
   flex-direction: column;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .form-label {
@@ -725,6 +759,10 @@ body {
   padding: 12px 14px;
   border-radius: var(--radius-md);
   font-size: 15px;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
 }
 
 .form-input:focus {

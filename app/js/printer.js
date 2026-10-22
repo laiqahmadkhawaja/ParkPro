@@ -6,7 +6,7 @@
 
 class ParkProPrinter {
   constructor() {
-    this.selectedPrinterMac = null;
+    this.selectedPrinterMac = localStorage.getItem('parkpro_printer_mac') || null;
     this.webBluetoothDevice = null;
     this.gattServer = null;
     this.printCharacteristic = null;
@@ -34,24 +34,46 @@ class ParkProPrinter {
         return [];
       }
     } else if (this.isWebBluetoothAvailable()) {
-      // In Web Bluetooth, paired devices can be queried via getDevices() if granted
-      if (navigator.bluetooth.getDevices) {
-        const devices = await navigator.bluetooth.getDevices();
-        return devices.map(d => ({ name: d.name || 'Thermal Printer', address: d.id }));
+      if (navigator.bluetooth && navigator.bluetooth.getDevices) {
+        try {
+          const devices = await navigator.bluetooth.getDevices();
+          return devices.map(d => ({ name: d.name || 'Thermal Printer', address: d.id }));
+        } catch (e) {
+          return [];
+        }
       }
     }
     return [];
+  }
+
+  openNativeBluetoothSettings() {
+    if (this.isNativeAvailable() && typeof window.AndroidBridge.openBluetoothSettings === 'function') {
+      window.AndroidBridge.openBluetoothSettings();
+      return true;
+    }
+    return false;
   }
 
   /**
    * Connect or request Bluetooth printer
    */
   async pairNewPrinter() {
+    if (this.isNativeAvailable()) {
+      const devices = await this.getPairedPrinters();
+      if (!devices || devices.length === 0) {
+        this.openNativeBluetoothSettings();
+        throw new Error('No paired Bluetooth printers found.\nOpened Android Bluetooth Settings to pair your thermal printer.');
+      }
+      this.selectedPrinterMac = devices[0].address;
+      localStorage.setItem('parkpro_printer_mac', this.selectedPrinterMac);
+      return devices[0];
+    }
+
     if (this.isWebBluetoothAvailable()) {
       try {
         this.webBluetoothDevice = await navigator.bluetooth.requestDevice({
           filters: [
-            { services: ['000018f0-0000-1000-8000-00805f9b34fb'] }, // Standard ESC/POS Service
+            { services: ['000018f0-0000-1000-8000-00805f9b34fb'] },
             { services: ['e7810a71-73ae-499d-8c15-faa9aef0c3f2'] },
             { services: ['49535343-fe7d-4ae5-8fa9-9fafd205e455'] }
           ],
@@ -63,6 +85,7 @@ class ParkProPrinter {
         this.printCharacteristic = await service.getCharacteristics().then(chars => chars[0]);
 
         this.selectedPrinterMac = this.webBluetoothDevice.id;
+        localStorage.setItem('parkpro_printer_mac', this.selectedPrinterMac);
         console.log('[Printer] Connected to Web Bluetooth device:', this.webBluetoothDevice.name);
         return { name: this.webBluetoothDevice.name, address: this.webBluetoothDevice.id };
       } catch (err) {
@@ -70,7 +93,7 @@ class ParkProPrinter {
         throw err;
       }
     } else {
-      throw new Error('Web Bluetooth not available in this browser environment.');
+      throw new Error('Bluetooth printer interface not detected.');
     }
   }
 

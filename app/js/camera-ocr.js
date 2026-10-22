@@ -112,7 +112,9 @@ class ParkProCameraOCR {
   cleanPlateText(rawText) {
     if (!rawText) return '';
     let cleaned = rawText.toUpperCase().replace(/[^A-Z0-9\s-]/g, '').trim();
-    cleaned = cleaned.replace(/\s+/g, '-');
+    cleaned = cleaned.replace(/[\s_]+/g, '-');
+    cleaned = cleaned.replace(/-+/g, '-');
+    cleaned = cleaned.replace(/^-+|-+$/g, '');
     return cleaned;
   }
 

@@ -301,7 +301,7 @@
             <label class="form-label">Address & Gate Description</label>
             <input type="text" id="settingLotAddress" class="form-input" required>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-grid-2">
             <div class="form-group">
               <label class="form-label">Contact Phone</label>
               <input type="text" id="settingLotPhone" class="form-input" required>
@@ -311,7 +311,7 @@
               <input type="text" id="settingCurrency" class="form-input" required>
             </div>
           </div>
-          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="form-grid-2">
             <div class="form-group">
               <label class="form-label">Total Slot Capacity</label>
               <input type="number" id="settingCapacity" class="form-input" required>
@@ -358,9 +358,22 @@
       <!-- Tab Content: Bluetooth Thermal Printer -->
       <div id="tabContentPrinter" class="settings-tab-content" style="display:none;">
         <div style="display:flex;flex-direction:column;gap:12px;">
-          <div style="font-size:13px;color:var(--text-muted);">Configure 58mm/80mm Bluetooth ESC/POS receipt printer:</div>
-          <button type="button" id="btnPairPrinter" class="submit-btn" style="background:#0284c7;">🔍 PAIR / CONNECT PRINTER</button>
-          <button type="button" id="btnTestPrint" class="submit-btn" style="background:var(--bg-card);">🖨️ SEND TEST PRINT TICKET</button>
+          <div style="font-size:13px;color:var(--text-muted);">Configure 58mm / 80mm Bluetooth ESC/POS receipt printer:</div>
+
+          <div class="form-group">
+            <label class="form-label">Active Thermal Printer</label>
+            <select id="pairedPrintersSelect" class="form-input" style="background:var(--bg-primary);">
+              <option value="">-- No Printer Selected --</option>
+            </select>
+          </div>
+
+          <div class="form-grid-2">
+            <button type="button" id="btnRefreshPrinters" class="submit-btn" style="background:#0284c7;font-size:13px;padding:10px;">🔄 SCAN PAIRED</button>
+            <button type="button" id="btnOpenBtSettings" class="submit-btn" style="background:#475569;font-size:13px;padding:10px;">⚙️ BT SETTINGS</button>
+          </div>
+
+          <button type="button" id="btnTestPrint" class="submit-btn" style="background:var(--accent-success);font-size:14px;padding:12px;">🖨️ SEND TEST PRINT TICKET</button>
+
           <div id="printerStatusLog" style="font-size:12px;font-family:monospace;padding:10px;background:var(--bg-primary);border-radius:var(--radius-md);border:1px solid var(--border-color);color:var(--text-muted);">Printer status: Ready</div>
         </div>
       </div>
@@ -421,7 +434,7 @@
           <input type="text" id="wizardLotAddress" class="form-input" value="Main Commercial Boulevard, Gate #1" required>
         </div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-grid-2">
           <div class="form-group">
             <label class="form-label">Currency Symbol</label>
             <input type="text" id="wizardCurrency" class="form-input" value="PKR" required>
@@ -436,7 +449,7 @@
 
         <div style="font-size:13px;font-weight:700;color:#60a5fa;">MASTER ADMINISTRATOR CREDENTIALS</div>
 
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+        <div class="form-grid-2">
           <div class="form-group">
             <label class="form-label">Set 4-Digit Admin PIN</label>
             <input type="password" id="wizardAdminPin" class="form-input" maxlength="4" pattern="[0-9]{4}" value="1234" required>

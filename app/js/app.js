@@ -324,6 +324,9 @@ window.switchSettingsTab = function(tabName) {
   if (tabName === 'receipt' && window.parkproSettings) {
     window.parkproSettings.renderReceiptPreview();
   }
+  if (tabName === 'printer' && typeof window.loadPrintersList === 'function') {
+    window.loadPrintersList();
+  }
 };
 
 window.toggleReceiptWidth = function(width) {
@@ -471,18 +474,42 @@ function setupEventListeners() {
   }
 
   if (btnSnapOcr) {
-    btnSnapOcr.onclick = () => {
-      window.cameraOcr.captureAndScanPlate();
-      const samplePlates = ['LEE-24-9102', 'ICT-843', 'KHI-5512', 'ISB-1092', 'LHR-304'];
-      const randomPlate = samplePlates[Math.floor(Math.random() * samplePlates.length)];
-      plateInputField.value = randomPlate;
+    btnSnapOcr.onclick = async () => {
+      btnSnapOcr.disabled = true;
+      const originalText = btnSnapOcr.textContent;
+      btnSnapOcr.textContent = '⏳ RECOGNIZING PLATE...';
 
-      window.cameraOcr.stopCamera();
-      videoEl.style.display = 'none';
-      reticleEl.style.display = 'none';
-      placeholderEl.style.display = 'block';
-      btnSnapOcr.style.display = 'none';
-      btnToggleCamera.textContent = '📷 RE-OPEN CAMERA';
+      try {
+        const dataUrl = window.cameraOcr.captureAndScanPlate();
+        let recognizedPlate = '';
+
+        if (window.AndroidBridge && typeof window.AndroidBridge.recognizePlateFromBase64 === 'function') {
+          recognizedPlate = window.AndroidBridge.recognizePlateFromBase64(dataUrl);
+        }
+
+        recognizedPlate = window.cameraOcr.cleanPlateText(recognizedPlate);
+
+        if (recognizedPlate && recognizedPlate.length >= 3) {
+          plateInputField.value = recognizedPlate;
+          if (window.AndroidBridge && typeof window.AndroidBridge.vibrate === 'function') {
+            window.AndroidBridge.vibrate(80);
+          }
+          window.cameraOcr.stopCamera();
+          videoEl.style.display = 'none';
+          reticleEl.style.display = 'none';
+          placeholderEl.style.display = 'block';
+          btnSnapOcr.style.display = 'none';
+          btnToggleCamera.textContent = '📷 RE-OPEN CAMERA';
+        } else {
+          alert('No license plate detected in camera frame.\n\nPlease ensure the plate is centered within the frame, well-lit, or enter it manually.');
+        }
+      } catch (err) {
+        console.error('Scan error:', err);
+        alert('OCR Scan error: ' + err.message);
+      } finally {
+        btnSnapOcr.disabled = false;
+        btnSnapOcr.textContent = originalText;
+      }
     };
   }
 
@@ -508,20 +535,72 @@ function setupEventListeners() {
   }
 
   // Bluetooth Printer Controls inside Settings
-  const btnPairPrinter = document.getElementById('btnPairPrinter');
+  const pairedPrintersSelect = document.getElementById('pairedPrintersSelect');
+  const btnRefreshPrinters = document.getElementById('btnRefreshPrinters');
+  const btnOpenBtSettings = document.getElementById('btnOpenBtSettings');
   const btnTestPrint = document.getElementById('btnTestPrint');
   const printerStatusLog = document.getElementById('printerStatusLog');
 
-  if (btnPairPrinter) {
-    btnPairPrinter.onclick = async () => {
-      try {
-        printerStatusLog.textContent = 'Searching for Bluetooth thermal printers...';
-        const paired = await window.parkproPrinter.pairNewPrinter();
-        printerStatusLog.textContent = `Connected: ${paired.name} (${paired.address})`;
-        alert(`Bluetooth Printer Paired Successfully: ${paired.name}`);
-      } catch (err) {
-        printerStatusLog.textContent = 'Pairing note: ' + err.message;
-        alert(err.message);
+  window.loadPrintersList = async function() {
+    if (!pairedPrintersSelect) return;
+    pairedPrintersSelect.innerHTML = '<option value="">Scanning devices...</option>';
+    try {
+      const printers = await window.parkproPrinter.getPairedPrinters();
+      pairedPrintersSelect.innerHTML = '';
+
+      if (!printers || printers.length === 0) {
+        pairedPrintersSelect.innerHTML = '<option value="">-- No paired printers found --</option>';
+        if (printerStatusLog) {
+          printerStatusLog.textContent = 'No paired Bluetooth thermal printers detected. Tap "⚙️ BT SETTINGS" to pair your printer in Android Settings.';
+        }
+        return;
+      }
+
+      const savedMac = localStorage.getItem('parkpro_printer_mac') || window.parkproPrinter.selectedPrinterMac;
+
+      printers.forEach((p, index) => {
+        const opt = document.createElement('option');
+        opt.value = p.address;
+        opt.textContent = `${p.name} (${p.address})`;
+        if (savedMac === p.address || (!savedMac && index === 0)) {
+          opt.selected = true;
+          window.parkproPrinter.selectedPrinterMac = p.address;
+          localStorage.setItem('parkpro_printer_mac', p.address);
+        }
+        pairedPrintersSelect.appendChild(opt);
+      });
+
+      if (printerStatusLog) {
+        printerStatusLog.textContent = `Found ${printers.length} paired Bluetooth device(s). Ready to print.`;
+      }
+    } catch (err) {
+      pairedPrintersSelect.innerHTML = '<option value="">Error querying printers</option>';
+      if (printerStatusLog) printerStatusLog.textContent = 'Error: ' + err.message;
+    }
+  };
+
+  if (pairedPrintersSelect) {
+    pairedPrintersSelect.onchange = () => {
+      const mac = pairedPrintersSelect.value;
+      window.parkproPrinter.selectedPrinterMac = mac;
+      localStorage.setItem('parkpro_printer_mac', mac);
+      if (printerStatusLog) printerStatusLog.textContent = 'Selected printer: ' + mac;
+    };
+  }
+
+  if (btnRefreshPrinters) {
+    btnRefreshPrinters.onclick = async () => {
+      if (printerStatusLog) printerStatusLog.textContent = 'Scanning paired Bluetooth devices...';
+      await window.loadPrintersList();
+    };
+  }
+
+  if (btnOpenBtSettings) {
+    btnOpenBtSettings.onclick = () => {
+      if (window.parkproPrinter.openNativeBluetoothSettings()) {
+        if (printerStatusLog) printerStatusLog.textContent = 'Opened Android Bluetooth Settings.';
+      } else {
+        alert('Please open your Android device Settings > Bluetooth to pair your printer.');
       }
     };
   }
