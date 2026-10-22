@@ -15,6 +15,12 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    sourceSets {
+        main {
+            assets.srcDirs = ['src/main/assets']
+        }
+    }
+
     buildTypes {
         release {
             minifyEnabled false
@@ -30,6 +36,15 @@ android {
         sourceCompatibility JavaVersion.VERSION_17
         targetCompatibility JavaVersion.VERSION_17
     }
+}
+
+task copyWebAssets(type: Copy) {
+    from '../../app'
+    into 'src/main/assets'
+}
+
+tasks.matching { it.name.startsWith("preBuild") }.all {
+    dependsOn copyWebAssets
 }
 
 dependencies {

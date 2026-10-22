@@ -35,6 +35,7 @@ class ParkProSettings {
     setVal('settingCapacity', this.currentSettings.capacity || '100');
     setVal('settingPrinterWidth', this.currentSettings.printer_width || '58');
     setVal('settingReceiptFooter', this.currentSettings.receipt_footer || 'Park at own risk. Keep ticket safe.');
+    setVal('settingServerUrl', this.currentSettings.server_url || '');
 
     this.receiptWidth = this.currentSettings.printer_width || '58';
   }
@@ -49,7 +50,8 @@ class ParkProSettings {
       { key: 'currency', value: getVal('settingCurrency') },
       { key: 'capacity', value: getVal('settingCapacity') },
       { key: 'printer_width', value: getVal('settingPrinterWidth') },
-      { key: 'receipt_footer', value: getVal('settingReceiptFooter') }
+      { key: 'receipt_footer', value: getVal('settingReceiptFooter') },
+      { key: 'server_url', value: getVal('settingServerUrl') }
     ];
 
     for (const s of newSettings) {

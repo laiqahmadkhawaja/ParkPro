@@ -5,10 +5,28 @@
 
 class ParkProSync {
   constructor() {
-    this.apiBase = '../server-php/api';
+    this.apiBase = '';
     this.isSyncing = false;
     this.lastSyncTimestamp = localStorage.getItem('parkpro_last_sync') || '1970-01-01T00:00:00Z';
     this.syncInterval = null;
+  }
+
+  async getApiBase() {
+    try {
+      const setting = await window.db.get('settings', 'server_url');
+      if (setting && setting.value && setting.value.trim().length > 0) {
+        return setting.value.trim().replace(/\/$/, '');
+      }
+    } catch (e) {}
+    const local = localStorage.getItem('parkpro_server_url');
+    if (local && local.trim().length > 0) {
+      return local.trim().replace(/\/$/, '');
+    }
+    // Only default to relative path if served directly from a normal HTTP web server
+    if (window.location.protocol.startsWith('http') && !window.location.hostname.includes('androidplatform.net')) {
+      return '../server-php/api';
+    }
+    return '';
   }
 
   init() {
@@ -27,8 +45,12 @@ class ParkProSync {
   }
 
   async checkServerHealth() {
+    const apiBase = await this.getApiBase();
+    if (!apiBase) {
+      return false;
+    }
     try {
-      const resp = await fetch(`${this.apiBase}/health.php`, { method: 'GET' });
+      const resp = await fetch(`${apiBase}/health.php`, { method: 'GET' });
       if (resp.ok) {
         const json = await resp.json();
         return json.status === 'online';
@@ -70,7 +92,9 @@ class ParkProSync {
 
     console.log(`[Sync] Pushing ${pending.length} pending operations to server...`);
 
-    const resp = await fetch(`${this.apiBase}/sync.php?action=push`, {
+    const apiBase = await this.getApiBase();
+    if (!apiBase) return;
+    const resp = await fetch(`${apiBase}/sync.php?action=push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ items: pending })
@@ -89,7 +113,9 @@ class ParkProSync {
   }
 
   async pullRemoteDelta() {
-    const resp = await fetch(`${this.apiBase}/sync.php?action=pull&since=${encodeURIComponent(this.lastSyncTimestamp)}`);
+    const apiBase = await this.getApiBase();
+    if (!apiBase) return;
+    const resp = await fetch(`${apiBase}/sync.php?action=pull&since=${encodeURIComponent(this.lastSyncTimestamp)}`);
     if (!resp.ok) return;
 
     const result = await resp.json();
